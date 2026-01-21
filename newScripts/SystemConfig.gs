@@ -1,7 +1,7 @@
 const SYSTEM_CONFIG = {
   IIKO: {
     fields: [
-      { key: "date", label: "Дата", type: "text" },
+      { key: "date", label: "Дата", type: "date" },
       {
         key: "docNumber",
         label: "Входящий номер",
@@ -21,7 +21,7 @@ const SYSTEM_CONFIG = {
   },
   DOCSINBOX: {
     fields: [
-      { key: "date", label: "Дата", type: "text" },
+      { key: "date", label: "Дата", type: "date" },
       {
         key: "docNumber",
         label: "Номер накладной поставщика",
@@ -36,7 +36,7 @@ const SYSTEM_CONFIG = {
   },
   SBIS: {
     fields: [
-      { key: "eventDate", label: "Дата события", type: "text", aliases: ["Дата"] },
+      { key: "eventDate", label: "Дата события", type: "date", aliases: ["Дата"] },
       { key: "docNumber", label: "Номер", type: "text" },
       { key: "counterparty", label: "Контрагент", type: "text" },
       { key: "sum", label: "Сумма", type: "sum" },
@@ -45,8 +45,8 @@ const SYSTEM_CONFIG = {
   },
   SAP: {
     fields: [
-      { key: "docDate", label: "Дата документа", type: "text" },
-      { key: "paymentDate", label: "Дата платежа", type: "text" },
+      { key: "docDate", label: "Дата документа", type: "date" },
+      { key: "paymentDate", label: "Дата платежа", type: "date" },
       { key: "reference", label: "Ссылка", type: "text" },
       { key: "counterparty", label: "Наименование контрагента", type: "text" },
       { key: "sum", label: "Сумма в ВВ", type: "sum" },

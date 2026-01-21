@@ -120,7 +120,9 @@ function applyHeaderFallback(schema, data, systemName) {
   const columns = schema.columns || {};
 
   systemConfig.fields.forEach((field) => {
-    const matchIndex = getHeaderMatchIndex(headerMap, field);
+    const exactIndex = getHeaderExactIndex(headerMap, field);
+    const aliasIndex = getHeaderAliasIndex(headerMap, field);
+    const matchIndex = exactIndex || aliasIndex;
     if (!matchIndex) {
       return;
     }
@@ -129,7 +131,11 @@ function applyHeaderFallback(schema, data, systemName) {
       columns[field.key] = matchIndex;
       return;
     }
-    if (!headerMatchesField(headerRow[currentIndex - 1], field)) {
+    if (exactIndex && !headerMatchesExact(headerRow[currentIndex - 1], field)) {
+      columns[field.key] = exactIndex;
+      return;
+    }
+    if (!exactIndex && !headerMatchesField(headerRow[currentIndex - 1], field)) {
       columns[field.key] = matchIndex;
     }
   });
@@ -155,17 +161,22 @@ function findBestHeaderRowIndex(data, fields) {
 function countHeaderMatches(headerMap, fields) {
   let score = 0;
   fields.forEach((field) => {
-    if (getHeaderMatchIndex(headerMap, field)) {
+    if (getHeaderExactIndex(headerMap, field) || getHeaderAliasIndex(headerMap, field)) {
       score += 1;
     }
   });
   return score;
 }
 
-function getHeaderMatchIndex(headerMap, field) {
-  const candidates = [field.label].concat(field.aliases || []);
-  for (let i = 0; i < candidates.length; i += 1) {
-    const normalized = normalizeHeader(candidates[i]);
+function getHeaderExactIndex(headerMap, field) {
+  const normalized = normalizeHeader(field.label);
+  return headerMap[normalized] || 0;
+}
+
+function getHeaderAliasIndex(headerMap, field) {
+  const aliases = field.aliases || [];
+  for (let i = 0; i < aliases.length; i += 1) {
+    const normalized = normalizeHeader(aliases[i]);
     const matchIndex = headerMap[normalized];
     if (matchIndex) {
       return matchIndex;
@@ -183,6 +194,10 @@ function headerMatchesField(headerValue, field) {
     }
   }
   return false;
+}
+
+function headerMatchesExact(headerValue, field) {
+  return normalizeHeader(headerValue) === normalizeHeader(field.label);
 }
 
 function buildHeaderIndexMap(headerRow) {
@@ -241,14 +256,15 @@ function writeOutputRows(sheet, rows, systemName) {
 
   const outputRange = sheet.getRange(2, 1, rows.length, headerCount);
   outputRange.setValues(rows);
-  const docFieldIndex = systemConfig.fields.findIndex(
-    (field) => field.key === "docNumber"
-  );
-  if (docFieldIndex >= 0) {
-    sheet
-      .getRange(2, docFieldIndex + 1, rows.length, 1)
-      .setNumberFormat("@");
-  }
+  const textColumnIndexes = systemConfig.fields
+    .map((field, index) => ({ field, index }))
+    .filter(
+      ({ field }) => field.key === "docNumber" || field.type === "date"
+    )
+    .map(({ index }) => index + 1);
+  textColumnIndexes.forEach((colIndex) => {
+    sheet.getRange(2, colIndex, rows.length, 1).setNumberFormat("@");
+  });
 }
 
 function resolveSystemName(fileName) {
