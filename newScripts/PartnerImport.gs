@@ -143,7 +143,7 @@ function buildPartnerRows(data, schema, fileName) {
     );
   }
 
-  return rows;
+  return applySemanticFilter(rows, fileName);
 }
 
 function buildPartnerRowsFromBlocks(data, schema, fileName) {
@@ -189,7 +189,77 @@ function buildPartnerRowsFromBlocks(data, schema, fileName) {
     );
   }
 
-  return rows;
+  return applySemanticFilter(rows, fileName);
+}
+
+function applySemanticFilter(rows, fileName) {
+  if (!PARTNER_CONFIG.USE_SEMANTIC_FILTER || !rows.length) {
+    return rows;
+  }
+
+  const batchSize = PARTNER_CONFIG.SEMANTIC_BATCH_SIZE || 30;
+  const filtered = [];
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+    const decisions = classifyPartnerRows(batch, fileName);
+    decisions.forEach((decision, idx) => {
+      if (decision && decision.include) {
+        filtered.push(batch[idx]);
+      }
+    });
+  }
+
+  Logger.log(
+    "Semantic filter kept %s/%s rows for %s",
+    filtered.length,
+    rows.length,
+    fileName
+  );
+  return filtered;
+}
+
+function classifyPartnerRows(rows, fileName) {
+  const payload = {
+    task: "Классификация строк сверки поставщика",
+    fileName: fileName,
+    labels: {
+      include:
+        "Оставить строку: отражает расход клиента (реализация, отгрузка) или корректировку",
+      exclude:
+        "Исключить строку: платежи, оплаты, банковские поручения, поступления денег"
+    },
+    rules: [
+      "Не используй позицию суммы (дебет/кредит) как единственный признак.",
+      "Фокус на смысле текста документа.",
+      "Верни только JSON."
+    ],
+    rows: rows.map((row, index) => ({
+      id: index,
+      date: row[0],
+      text: row[1],
+      number: row[2],
+      sum: row[3]
+    })),
+    output_format: [
+      { id: 0, include: true, reason: "..." }
+    ]
+  };
+
+  const prompt = JSON.stringify(payload, null, 2);
+  const response = callDeepSeek(prompt);
+  const schema = extractSchemaFromResponse(response);
+  if (!Array.isArray(schema)) {
+    throw new Error("DeepSeek вернул не массив для семантики: " + response);
+  }
+
+  const decisions = rows.map(() => ({ include: false }));
+  schema.forEach((item) => {
+    if (item && typeof item.id === "number") {
+      decisions[item.id] = { include: !!item.include };
+    }
+  });
+
+  return decisions;
 }
 
 function ensurePartnerSheet(spreadsheet) {
