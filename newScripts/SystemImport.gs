@@ -99,6 +99,9 @@ function buildOutputRows(data, schema, systemName) {
       if (field.type === "sum") {
         return normalizeSum(rawValue);
       }
+    if (field.type === "date") {
+      return normalizeDateValue(rawValue);
+    }
       return rawValue;
     });
 
@@ -254,8 +257,6 @@ function writeOutputRows(sheet, rows, systemName) {
     return;
   }
 
-  const outputRange = sheet.getRange(2, 1, rows.length, headerCount);
-  outputRange.setValues(rows);
   const textColumnIndexes = systemConfig.fields
     .map((field, index) => ({ field, index }))
     .filter(
@@ -265,6 +266,8 @@ function writeOutputRows(sheet, rows, systemName) {
   textColumnIndexes.forEach((colIndex) => {
     sheet.getRange(2, colIndex, rows.length, 1).setNumberFormat("@");
   });
+  const outputRange = sheet.getRange(2, 1, rows.length, headerCount);
+  outputRange.setValues(rows);
 }
 
 function resolveSystemName(fileName) {
@@ -310,6 +313,34 @@ function normalizeSum(value) {
     return "";
   }
   return value.toString().replace(/\s/g, "").replace(",", ".");
+}
+
+function normalizeDateValue(value) {
+  if (!value) {
+    return "";
+  }
+  const trimmed = value.toString().trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const parts = trimmed.split("-");
+    return [parts[2], parts[1], parts[0]].join(".");
+  }
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      return Utilities.formatDate(
+        parsed,
+        Session.getScriptTimeZone(),
+        "dd.MM.yyyy"
+      );
+    }
+  }
+  return trimmed;
 }
 
 function getCellValue(row, colIndex) {
