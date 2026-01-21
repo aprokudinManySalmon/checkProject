@@ -1,0 +1,20 @@
+const PARTNER_CONFIG = {
+  DEFAULT_PARTNER_ROOT_FOLDER_ID: "",
+  PARTNER_SHEET_NAME: "PARTNER_IMPORT",
+  DELETE_SOURCE_FILES: true,
+  SAMPLE_HEADER_ROWS: 5,
+  SAMPLE_DATA_ROWS: 50,
+  OUTPUT_HEADERS: [
+    "Дата",
+    "Номер документа",
+    "Тип документа",
+    "Сумма",
+    "Описание",
+    "Файл"
+  ]
+};
+
+function getPartnerConfigValue(key, fallback) {
+  const value = PropertiesService.getScriptProperties().getProperty(key);
+  return value || fallback;
+}
