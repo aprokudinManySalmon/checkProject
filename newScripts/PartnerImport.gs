@@ -7,7 +7,6 @@ function onOpen() {
 
 function processPartnerFile() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const partnerName = spreadsheet.getName();
   const rootFolderId = getPartnerConfigValue(
     "PARTNER_ROOT_FOLDER_ID",
     PARTNER_CONFIG.DEFAULT_PARTNER_ROOT_FOLDER_ID
@@ -16,18 +15,15 @@ function processPartnerFile() {
     throw new Error("Не задан PARTNER_ROOT_FOLDER_ID в Script Properties.");
   }
 
-  const partnerFolder = findPartnerFolder(rootFolderId, partnerName);
-  const filesIterator = partnerFolder.getFiles();
+  const partnerFolder = DriveApp.getFolderById(rootFolderId);
+  const files = collectExcelFiles(partnerFolder);
   const outputSheet = ensurePartnerSheet(spreadsheet);
 
   let processedAny = false;
-  while (filesIterator.hasNext()) {
-    const file = filesIterator.next();
+  const allRows = [];
+  for (let i = 0; i < files.length; i += 1) {
+    const file = files[i];
     const fileName = file.getName();
-    if (!isExcelFile(fileName)) {
-      continue;
-    }
-
     const convertedFileId = convertExcelToSheet(fileName, file.getId());
     let processed = false;
     try {
@@ -40,7 +36,9 @@ function processPartnerFile() {
 
       const schema = inferPartnerSchema(data, fileName);
       const rows = buildPartnerRows(data, schema, fileName);
-      writePartnerRows(outputSheet, rows);
+      if (rows.length) {
+        allRows.push.apply(allRows, rows);
+      }
       processed = true;
       processedAny = true;
     } finally {
@@ -52,8 +50,11 @@ function processPartnerFile() {
   }
 
   if (!processedAny) {
-    Logger.log("Подходящих файлов не найдено в папке: " + partnerName);
+    Logger.log("Подходящих файлов не найдено в папке: " + partnerFolder.getName());
+    return;
   }
+
+  writePartnerRows(outputSheet, allRows);
 }
 
 function inferPartnerSchema(data, fileName) {
@@ -145,11 +146,13 @@ function ensurePartnerSheet(spreadsheet) {
 }
 
 function writePartnerRows(sheet, rows) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    sheet
-      .getRange(2, 1, lastRow - 1, PARTNER_CONFIG.OUTPUT_HEADERS.length)
-      .clearContent();
+  if (PARTNER_CONFIG.CLEAR_SHEET_BEFORE_RUN) {
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet
+        .getRange(2, 1, lastRow - 1, PARTNER_CONFIG.OUTPUT_HEADERS.length)
+        .clearContent();
+    }
   }
 
   if (!rows.length) {
@@ -250,11 +253,22 @@ function isAllowedDocType(docType, docName) {
   return docType === "Реализация" || docType === "Корректировка";
 }
 
-function findPartnerFolder(rootFolderId, partnerName) {
-  const rootFolder = DriveApp.getFolderById(rootFolderId);
-  const folderIterator = rootFolder.getFoldersByName(partnerName);
-  if (!folderIterator.hasNext()) {
-    throw new Error("Папка поставщика не найдена: " + partnerName);
+function collectExcelFiles(rootFolder) {
+  const stack = [rootFolder];
+  const files = [];
+  while (stack.length) {
+    const folder = stack.pop();
+    const fileIterator = folder.getFiles();
+    while (fileIterator.hasNext()) {
+      const file = fileIterator.next();
+      if (isExcelFile(file.getName())) {
+        files.push(file);
+      }
+    }
+    const subfolders = folder.getFolders();
+    while (subfolders.hasNext()) {
+      stack.push(subfolders.next());
+    }
   }
-  return folderIterator.next();
+  return files;
 }
