@@ -200,13 +200,35 @@ function applySemanticFilter(rows, fileName) {
   const batchSize = PARTNER_CONFIG.SEMANTIC_BATCH_SIZE || 30;
   Logger.log("Semantic batch size: %s", batchSize);
   const filtered = [];
-  for (let i = 0; i < rows.length; i += batchSize) {
-    const batch = rows.slice(i, i + batchSize);
+  const candidates = [];
+  let fastExcluded = 0;
+
+  if (PARTNER_CONFIG.SEMANTIC_FAST_EXCLUDE) {
+    rows.forEach((row) => {
+      if (matchesFastExclude(row[1])) {
+        fastExcluded += 1;
+      } else {
+        candidates.push(row);
+      }
+    });
+  } else {
+    candidates.push.apply(candidates, rows);
+  }
+
+  Logger.log(
+    "Semantic fast exclude: %s of %s for %s",
+    fastExcluded,
+    rows.length,
+    fileName
+  );
+
+  for (let i = 0; i < candidates.length; i += batchSize) {
+    const batch = candidates.slice(i, i + batchSize);
     Logger.log(
       "Semantic batch %s: rows %s-%s",
       Math.floor(i / batchSize) + 1,
       i + 1,
-      Math.min(i + batchSize, rows.length)
+      Math.min(i + batchSize, candidates.length)
     );
     const decisions = classifyPartnerRows(batch, fileName);
     Logger.log(
@@ -242,22 +264,21 @@ function classifyPartnerRows(rows, fileName) {
     rules: [
       "Не используй позицию суммы (дебет/кредит) как единственный признак.",
       "Фокус на смысле текста документа.",
-      "Верни только JSON."
+      "Верни только JSON массива, без пояснений.",
+      "Не возвращай поле reason, только id и include."
     ],
     rows: rows.map((row, index) => ({
       id: index,
-      date: row[0],
-      text: row[1],
-      number: row[2],
-      sum: row[3]
+      text: row[1]
     })),
     output_format: [
-      { id: 0, include: true, reason: "..." }
+      { id: 0, include: true }
     ]
   };
 
   const prompt = JSON.stringify(payload, null, 2);
   Logger.log("Semantic request rows: %s for %s", rows.length, fileName);
+  Logger.log("Semantic payload chars: %s", prompt.length);
   const started = Date.now();
   const response = callDeepSeek(prompt);
   Logger.log("Semantic request ms: %s for %s", Date.now() - started, fileName);
@@ -306,6 +327,15 @@ function extractSemanticArray(content) {
   }
 
   return null;
+}
+
+function matchesFastExclude(text) {
+  if (!text) {
+    return false;
+  }
+  const patterns = PARTNER_CONFIG.SEMANTIC_EXCLUDE_PATTERNS || [];
+  const normalized = text.toString().toLowerCase();
+  return patterns.some((pattern) => normalized.indexOf(pattern) !== -1);
 }
 
 function ensurePartnerSheet(spreadsheet) {

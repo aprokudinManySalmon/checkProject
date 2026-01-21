@@ -5,6 +5,20 @@ const PARTNER_CONFIG = {
   CLEAR_SHEET_BEFORE_RUN: true,
   USE_SEMANTIC_FILTER: true,
   SEMANTIC_BATCH_SIZE: 120,
+  SEMANTIC_FAST_EXCLUDE: true,
+  SEMANTIC_SEND_REASON: false,
+  SEMANTIC_EXCLUDE_PATTERNS: [
+    "оплата",
+    "оплачено",
+    "платеж",
+    "платёж",
+    "платежное поручение",
+    "платёжное поручение",
+    "п/п",
+    "плат поруч",
+    "банковская выписка",
+    "поступление денежных средств"
+  ],
   SAMPLE_HEADER_ROWS: 5,
   SAMPLE_DATA_ROWS: 50,
   OUTPUT_HEADERS: [
