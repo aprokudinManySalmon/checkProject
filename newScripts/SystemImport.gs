@@ -51,12 +51,16 @@ function processSystemFiles() {
 
 function inferSchemaForSystem(data, systemName) {
   const systemConfig = getSystemConfig(systemName);
+  const headerRowIndex = findBestHeaderRowIndex(data, systemConfig.fields);
   const sampleRows = buildSampleRows(data);
   const prompt = buildSchemaPrompt(sampleRows, systemName, systemConfig.fields);
   Logger.log("DeepSeek prompt (%s): %s", systemName, prompt);
   const response = callDeepSeek(prompt);
   Logger.log("DeepSeek response (%s): %s", systemName, response);
   const schema = extractSchemaFromResponse(response);
+  if (headerRowIndex) {
+    schema.headerRowIndex = headerRowIndex;
+  }
   applyHeaderFallback(schema, data, systemName);
   Logger.log("DeepSeek schema (%s): %s", systemName, JSON.stringify(schema));
 
@@ -116,21 +120,69 @@ function applyHeaderFallback(schema, data, systemName) {
   const columns = schema.columns || {};
 
   systemConfig.fields.forEach((field) => {
-    if (columns[field.key]) {
+    const matchIndex = getHeaderMatchIndex(headerMap, field);
+    if (!matchIndex) {
       return;
     }
-    const candidates = [field.label].concat(field.aliases || []);
-    for (let i = 0; i < candidates.length; i += 1) {
-      const normalized = normalizeHeader(candidates[i]);
-      const matchIndex = headerMap[normalized];
-      if (matchIndex) {
-        columns[field.key] = matchIndex;
-        break;
-      }
+    const currentIndex = columns[field.key] || 0;
+    if (!currentIndex) {
+      columns[field.key] = matchIndex;
+      return;
+    }
+    if (!headerMatchesField(headerRow[currentIndex - 1], field)) {
+      columns[field.key] = matchIndex;
     }
   });
 
   schema.columns = columns;
+}
+
+function findBestHeaderRowIndex(data, fields) {
+  const maxRows = Math.min(data.length, CONFIG.SAMPLE_HEADER_ROWS);
+  let bestIndex = 0;
+  let bestScore = 0;
+  for (let i = 0; i < maxRows; i += 1) {
+    const headerMap = buildHeaderIndexMap(data[i] || []);
+    const score = countHeaderMatches(headerMap, fields);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i + 1;
+    }
+  }
+  return bestIndex;
+}
+
+function countHeaderMatches(headerMap, fields) {
+  let score = 0;
+  fields.forEach((field) => {
+    if (getHeaderMatchIndex(headerMap, field)) {
+      score += 1;
+    }
+  });
+  return score;
+}
+
+function getHeaderMatchIndex(headerMap, field) {
+  const candidates = [field.label].concat(field.aliases || []);
+  for (let i = 0; i < candidates.length; i += 1) {
+    const normalized = normalizeHeader(candidates[i]);
+    const matchIndex = headerMap[normalized];
+    if (matchIndex) {
+      return matchIndex;
+    }
+  }
+  return 0;
+}
+
+function headerMatchesField(headerValue, field) {
+  const candidates = [field.label].concat(field.aliases || []);
+  const normalizedHeader = normalizeHeader(headerValue);
+  for (let i = 0; i < candidates.length; i += 1) {
+    if (normalizedHeader === normalizeHeader(candidates[i])) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function buildHeaderIndexMap(headerRow) {
@@ -161,9 +213,15 @@ function ensureTargetSheet(spreadsheet, systemName) {
   let sheet = spreadsheet.getSheetByName(systemName);
   if (!sheet) {
     sheet = spreadsheet.insertSheet(systemName);
-    sheet.getRange(1, 1, 1, systemConfig.fields.length).setValues([
-      systemConfig.fields.map((field) => field.label)
-    ]);
+  }
+
+  const headerValues = systemConfig.fields.map((field) => field.label);
+  sheet.getRange(1, 1, 1, headerValues.length).setValues([headerValues]);
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn > headerValues.length) {
+    sheet
+      .getRange(1, headerValues.length + 1, sheet.getMaxRows(), lastColumn - headerValues.length)
+      .clearContent();
   }
 
   return sheet;
