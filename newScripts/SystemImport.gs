@@ -39,10 +39,10 @@ function processSystemFiles() {
       }
 
       const schema = inferSchemaForSystem(data, systemName);
-      const rows = buildOutputRows(data, schema, systemName, fileName);
+      const rows = buildOutputRows(data, schema, systemName);
 
       const targetSheet = ensureTargetSheet(spreadsheet, systemName);
-      writeOutputRows(targetSheet, rows);
+      writeOutputRows(targetSheet, rows, systemName);
     } finally {
       DriveApp.getFileById(convertedFileId).setTrashed(true);
     }
@@ -50,12 +50,13 @@ function processSystemFiles() {
 }
 
 function inferSchemaForSystem(data, systemName) {
+  const systemConfig = getSystemConfig(systemName);
   const sampleRows = buildSampleRows(data);
-  const prompt = buildSchemaPrompt(sampleRows, systemName);
+  const prompt = buildSchemaPrompt(sampleRows, systemName, systemConfig.fields);
   const response = callDeepSeek(prompt);
   const schema = extractSchemaFromResponse(response);
 
-  if (!schema || !schema.docNumberCol || !schema.sumCol) {
+  if (!schema || !schema.columns) {
     throw new Error(
       "DeepSeek не вернул обязательные колонки: " + JSON.stringify(schema)
     );
@@ -72,8 +73,10 @@ function buildSampleRows(data) {
   return data.slice(0, maxRows);
 }
 
-function buildOutputRows(data, schema, systemName, fileName) {
+function buildOutputRows(data, schema, systemName) {
+  const systemConfig = getSystemConfig(systemName);
   const startRowIndex = Math.max(schema.headerRowIndex || 1, 1);
+  const columns = schema.columns || {};
   const rows = [];
 
   for (let i = startRowIndex; i < data.length; i += 1) {
@@ -82,57 +85,60 @@ function buildOutputRows(data, schema, systemName, fileName) {
       continue;
     }
 
-    const dateValue = getCellValue(row, schema.dateCol);
-    const docNumber = getCellValue(row, schema.docNumberCol);
-    const sumValue = normalizeSum(getCellValue(row, schema.sumCol));
-    const partnerValue = getCellValue(row, schema.partnerCol);
-    const commentValue = getCellValue(row, schema.commentCol);
-    const ttValue = getCellValue(row, schema.ttCol);
+    const values = systemConfig.fields.map((field) => {
+      const colIndex = columns[field.key] || 0;
+      const rawValue = getCellValue(row, colIndex);
+      if (field.type === "sum") {
+        return normalizeSum(rawValue);
+      }
+      return rawValue;
+    });
 
-    if (!docNumber && !sumValue) {
+    if (values.join("").trim() === "") {
       continue;
     }
 
-    rows.push([
-      dateValue,
-      docNumber,
-      partnerValue,
-      sumValue,
-      commentValue,
-      ttValue,
-      systemName,
-      fileName
-    ]);
+    rows.push(values);
   }
 
   return rows;
 }
 
 function ensureTargetSheet(spreadsheet, systemName) {
+  const systemConfig = getSystemConfig(systemName);
   let sheet = spreadsheet.getSheetByName(systemName);
   if (!sheet) {
     sheet = spreadsheet.insertSheet(systemName);
-    sheet.getRange(1, 1, 1, CONFIG.OUTPUT_HEADERS.length).setValues([
-      CONFIG.OUTPUT_HEADERS
+    sheet.getRange(1, 1, 1, systemConfig.fields.length).setValues([
+      systemConfig.fields.map((field) => field.label)
     ]);
   }
 
   return sheet;
 }
 
-function writeOutputRows(sheet, rows) {
+function writeOutputRows(sheet, rows, systemName) {
+  const systemConfig = getSystemConfig(systemName);
+  const headerCount = systemConfig.fields.length;
   const lastRow = sheet.getLastRow();
   if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+    sheet.getRange(2, 1, lastRow - 1, headerCount).clearContent();
   }
 
   if (!rows.length) {
     return;
   }
 
-  const outputRange = sheet.getRange(2, 1, rows.length, rows[0].length);
+  const outputRange = sheet.getRange(2, 1, rows.length, headerCount);
   outputRange.setValues(rows);
-  sheet.getRange(2, 2, rows.length, 1).setNumberFormat("@");
+  const docFieldIndex = systemConfig.fields.findIndex(
+    (field) => field.key === "docNumber"
+  );
+  if (docFieldIndex >= 0) {
+    sheet
+      .getRange(2, docFieldIndex + 1, rows.length, 1)
+      .setNumberFormat("@");
+  }
 }
 
 function resolveSystemName(fileName) {

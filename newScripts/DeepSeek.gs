@@ -1,24 +1,24 @@
-function buildSchemaPrompt(sampleRows, systemHint) {
+function buildSchemaPrompt(sampleRows, systemHint, fields) {
+  const fieldMap = fields.reduce((acc, field) => {
+    acc[field.key] = field.label;
+    return acc;
+  }, {});
+
+  const outputFormat = fields.reduce((acc, field) => {
+    acc[field.key] = 0;
+    return acc;
+  }, {});
+
   const payload = {
     task: "Определи колонки в таблице",
     system: systemHint,
     requirements: {
       headerRowIndex: "Индекс строки заголовка (1-based, в пределах sampleRows)",
-      dateCol: "Колонка даты документа (1-based)",
-      docNumberCol: "Колонка номера документа (1-based)",
-      sumCol: "Колонка суммы (1-based)",
-      partnerCol: "Колонка поставщика (1-based, если есть)",
-      commentCol: "Колонка комментария (1-based, если есть)",
-      ttCol: "Колонка ТТ/подразделения (1-based, если есть)"
+      columns: fieldMap
     },
     output_format: {
       headerRowIndex: 1,
-      dateCol: 1,
-      docNumberCol: 1,
-      sumCol: 1,
-      partnerCol: 1,
-      commentCol: 0,
-      ttCol: 0
+      columns: outputFormat
     },
     rules: [
       "Верни только JSON без пояснений.",
