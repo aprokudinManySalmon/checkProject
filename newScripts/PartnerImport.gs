@@ -17,6 +17,7 @@ function processPartnerFile() {
 
   const partnerFolder = DriveApp.getFolderById(rootFolderId);
   const files = collectExcelFiles(partnerFolder);
+  Logger.log("Partner files found: %s", files.length);
   const outputSheet = ensurePartnerSheet(spreadsheet);
 
   let processedAny = false;
@@ -24,6 +25,7 @@ function processPartnerFile() {
   for (let i = 0; i < files.length; i += 1) {
     const file = files[i];
     const fileName = file.getName();
+    Logger.log("Processing partner file: %s", fileName);
     const convertedFileId = convertExcelToSheet(fileName, file.getId());
     let processed = false;
     try {
@@ -36,6 +38,7 @@ function processPartnerFile() {
 
       const schema = inferPartnerSchema(data, fileName);
       const rows = buildPartnerRows(data, schema, fileName);
+      Logger.log("Rows extracted from %s: %s", fileName, rows.length);
       if (rows.length) {
         allRows.push.apply(allRows, rows);
       }
@@ -54,16 +57,25 @@ function processPartnerFile() {
     return;
   }
 
+  if (!allRows.length) {
+    Logger.log("Нет строк для записи после фильтрации.");
+    return;
+  }
+
   writePartnerRows(outputSheet, allRows);
 }
 
 function inferPartnerSchema(data, fileName) {
   const sampleRows = buildPartnerSampleRows(data);
+  const headerRowIndex = findBestPartnerHeaderRowIndex(data);
   const prompt = buildPartnerSchemaPrompt(sampleRows, fileName);
   Logger.log("DeepSeek prompt (partner): %s", prompt);
   const response = callDeepSeek(prompt);
   Logger.log("DeepSeek response (partner): %s", response);
   const schema = extractSchemaFromResponse(response);
+  if (headerRowIndex) {
+    schema.headerRowIndex = headerRowIndex;
+  }
 
   if (!schema || !schema.columns) {
     throw new Error("DeepSeek не вернул колонки партнера: " + response);
@@ -86,6 +98,8 @@ function buildPartnerRows(data, schema, fileName) {
   const columns = schema.columns || {};
   const startRowIndex = Math.max(schema.headerRowIndex || 1, 1);
   const rows = [];
+  let skippedMissing = 0;
+  let skippedType = 0;
 
   for (let i = startRowIndex; i < data.length; i += 1) {
     const row = data[i];
@@ -101,9 +115,11 @@ function buildPartnerRows(data, schema, fileName) {
     const docType = detectDocType(docName);
 
     if (!dateValue || !sumValue || !docNumber) {
+      skippedMissing += 1;
       continue;
     }
     if (!isAllowedDocType(docType, docName)) {
+      skippedType += 1;
       continue;
     }
 
@@ -115,6 +131,15 @@ function buildPartnerRows(data, schema, fileName) {
       docName,
       fileName
     ]);
+  }
+
+  if (skippedMissing || skippedType) {
+    Logger.log(
+      "Skipped rows in %s (missing=%s, type=%s)",
+      fileName,
+      skippedMissing,
+      skippedType
+    );
   }
 
   return rows;
@@ -223,6 +248,34 @@ function applyPartnerHeaderFallback(schema, data) {
     0;
 
   schema.columns = columns;
+}
+
+function findBestPartnerHeaderRowIndex(data) {
+  const maxRows = Math.min(data.length, PARTNER_CONFIG.SAMPLE_HEADER_ROWS);
+  const headerCandidates = [
+    normalizeHeader("Дата"),
+    normalizeHeader("Номер"),
+    normalizeHeader("Сумма"),
+    normalizeHeader("Документ"),
+    normalizeHeader("Описание")
+  ];
+  let bestIndex = 0;
+  let bestScore = 0;
+  for (let i = 0; i < maxRows; i += 1) {
+    const row = data[i] || [];
+    let score = 0;
+    row.forEach((cell) => {
+      const normalized = normalizeHeader(cell);
+      if (headerCandidates.indexOf(normalized) !== -1) {
+        score += 1;
+      }
+    });
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i + 1;
+    }
+  }
+  return bestIndex;
 }
 
 function buildHeaderIndexMap(headerRow) {
