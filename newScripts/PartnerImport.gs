@@ -247,19 +247,51 @@ function classifyPartnerRows(rows, fileName) {
 
   const prompt = JSON.stringify(payload, null, 2);
   const response = callDeepSeek(prompt);
-  const schema = extractSchemaFromResponse(response);
-  if (!Array.isArray(schema)) {
+  const parsed = extractSemanticArray(response);
+  if (!Array.isArray(parsed)) {
     throw new Error("DeepSeek вернул не массив для семантики: " + response);
   }
 
   const decisions = rows.map(() => ({ include: false }));
-  schema.forEach((item) => {
+  parsed.forEach((item) => {
     if (item && typeof item.id === "number") {
       decisions[item.id] = { include: !!item.include };
     }
   });
 
   return decisions;
+}
+
+function extractSemanticArray(content) {
+  const startBracket = content.indexOf("[");
+  const endBracket = content.lastIndexOf("]");
+  if (startBracket !== -1 && endBracket !== -1) {
+    const arrayText = content.slice(startBracket, endBracket + 1);
+    try {
+      return JSON.parse(arrayText);
+    } catch (err) {
+      Logger.log("Не удалось распарсить массив, пробуем объект: %s", err);
+    }
+  }
+
+  const startObject = content.indexOf("{");
+  const endObject = content.lastIndexOf("}");
+  if (startObject !== -1 && endObject !== -1) {
+    const objectText = content.slice(startObject, endObject + 1);
+    try {
+      const obj = JSON.parse(objectText);
+      if (Array.isArray(obj)) {
+        return obj;
+      }
+      if (Array.isArray(obj.items)) {
+        return obj.items;
+      }
+    } catch (err) {
+      Logger.log("Не удалось распарсить объект: %s", err);
+    }
+  }
+
+  return null;
 }
 
 function ensurePartnerSheet(spreadsheet) {
