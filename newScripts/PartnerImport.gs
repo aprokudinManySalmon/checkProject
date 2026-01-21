@@ -225,6 +225,29 @@ function applyPartnerHeaderFallback(schema, data) {
   schema.columns = columns;
 }
 
+function buildHeaderIndexMap(headerRow) {
+  const map = {};
+  headerRow.forEach((cell, index) => {
+    const normalized = normalizeHeader(cell);
+    if (normalized) {
+      map[normalized] = index + 1;
+    }
+  });
+  return map;
+}
+
+function normalizeHeader(value) {
+  if (!value) {
+    return "";
+  }
+  return value
+    .toString()
+    .toLowerCase()
+    .replace(/[«»"']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalizeDocNumber(value) {
   if (!value) {
     return "";
