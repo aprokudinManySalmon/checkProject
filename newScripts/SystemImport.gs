@@ -30,6 +30,7 @@ function processSystemFiles() {
     }
 
     const convertedFileId = convertExcelToSheet(fileName, file.getId());
+    let processed = false;
     try {
       const sourceSheet = SpreadsheetApp.openById(convertedFileId).getSheets()[0];
       const data = sourceSheet.getDataRange().getDisplayValues();
@@ -43,8 +44,12 @@ function processSystemFiles() {
 
       const targetSheet = ensureTargetSheet(spreadsheet, systemName);
       writeOutputRows(targetSheet, rows, systemName);
+      processed = true;
     } finally {
       DriveApp.getFileById(convertedFileId).setTrashed(true);
+      if (processed && CONFIG.DELETE_SOURCE_FILES) {
+        file.setTrashed(true);
+      }
     }
   }
 }

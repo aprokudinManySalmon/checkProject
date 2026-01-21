@@ -3,7 +3,8 @@ const CONFIG = {
   DEFAULT_DEEPSEEK_API_URL: "https://api.deepseek.com/chat/completions",
   DEFAULT_DEEPSEEK_MODEL: "deepseek-chat",
   SAMPLE_HEADER_ROWS: 5,
-  SAMPLE_DATA_ROWS: 50
+  SAMPLE_DATA_ROWS: 50,
+  DELETE_SOURCE_FILES: true
 };
 
 function getConfigValue(key, fallback) {
