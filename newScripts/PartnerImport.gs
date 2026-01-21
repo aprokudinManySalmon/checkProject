@@ -83,6 +83,10 @@ function inferPartnerSchema(data, fileName) {
 
   applyPartnerHeaderFallback(schema, data);
   applyPartnerPatternFallback(schema, data);
+  schema.blocks = detectPartnerHeaderBlocks(data);
+  if (schema.blocks.length) {
+    Logger.log("Partner blocks detected: %s", JSON.stringify(schema.blocks));
+  }
   Logger.log("DeepSeek schema (partner): %s", JSON.stringify(schema));
   return schema;
 }
@@ -101,6 +105,10 @@ function buildPartnerRows(data, schema, fileName) {
   const rows = [];
   let skippedMissing = 0;
   let skippedType = 0;
+
+  if (schema.blocks && schema.blocks.length) {
+    return buildPartnerRowsFromBlocks(data, schema, fileName);
+  }
 
   for (let i = startRowIndex; i < data.length; i += 1) {
     const row = data[i];
@@ -132,6 +140,60 @@ function buildPartnerRows(data, schema, fileName) {
       docName,
       fileName
     ]);
+  }
+
+  if (skippedMissing || skippedType) {
+    Logger.log(
+      "Skipped rows in %s (missing=%s, type=%s)",
+      fileName,
+      skippedMissing,
+      skippedType
+    );
+  }
+
+  return rows;
+}
+
+function buildPartnerRowsFromBlocks(data, schema, fileName) {
+  const rows = [];
+  let skippedMissing = 0;
+  let skippedType = 0;
+  const startRowIndex = Math.max(schema.headerRowIndex || 1, 1);
+  const blocks = schema.blocks || [];
+
+  for (let i = startRowIndex; i < data.length; i += 1) {
+    const row = data[i];
+    if (row.join("").trim() === "") {
+      continue;
+    }
+
+    blocks.forEach((block) => {
+      const dateValue = getCellValue(row, block.dateCol);
+      const docName = getCellValue(row, block.docCol);
+      const debitValue = normalizeSum(getCellValue(row, block.debitCol));
+      const creditValue = normalizeSum(getCellValue(row, block.creditCol));
+      const sumValue = debitValue || creditValue;
+      const docNumber = normalizeDocNumber(docName);
+      const docType = detectDocType(docName);
+
+      if (!dateValue || !sumValue || !docNumber) {
+        skippedMissing += 1;
+        return;
+      }
+      if (!isAllowedDocType(docType, docName)) {
+        skippedType += 1;
+        return;
+      }
+
+      rows.push([
+        dateValue,
+        docNumber,
+        docType,
+        sumValue,
+        docName,
+        fileName
+      ]);
+    });
   }
 
   if (skippedMissing || skippedType) {
@@ -342,6 +404,59 @@ function findBestPartnerHeaderRowIndex(data) {
     }
   }
   return bestIndex;
+}
+
+function detectPartnerHeaderBlocks(data) {
+  const maxRows = Math.min(data.length, 20);
+  let headerRowIndex = 0;
+
+  for (let i = 0; i < maxRows; i += 1) {
+    const row = data[i] || [];
+    const normalized = row.map((cell) => normalizeHeader(cell));
+    if (
+      normalized.indexOf("дата") !== -1 &&
+      normalized.indexOf("документ") !== -1 &&
+      (normalized.indexOf("дебет") !== -1 || normalized.indexOf("кредит") !== -1)
+    ) {
+      headerRowIndex = i + 1;
+      break;
+    }
+  }
+
+  if (!headerRowIndex) {
+    return [];
+  }
+
+  const headerRow = data[headerRowIndex - 1] || [];
+  const blocks = [];
+  for (let i = 0; i < headerRow.length; i += 1) {
+    if (normalizeHeader(headerRow[i]) !== "дата") {
+      continue;
+    }
+    const docCol = findHeaderOffset(headerRow, i + 1, "документ");
+    const debitCol = findHeaderOffset(headerRow, i + 1, "дебет");
+    const creditCol = findHeaderOffset(headerRow, i + 1, "кредит");
+    if (docCol && (debitCol || creditCol)) {
+      blocks.push({
+        headerRowIndex: headerRowIndex,
+        dateCol: i + 1,
+        docCol: docCol,
+        debitCol: debitCol,
+        creditCol: creditCol
+      });
+    }
+  }
+
+  return blocks;
+}
+
+function findHeaderOffset(headerRow, startIndex, headerName) {
+  for (let i = startIndex; i < headerRow.length; i += 1) {
+    if (normalizeHeader(headerRow[i]) === headerName) {
+      return i + 1;
+    }
+  }
+  return 0;
 }
 
 function buildHeaderIndexMap(headerRow) {
