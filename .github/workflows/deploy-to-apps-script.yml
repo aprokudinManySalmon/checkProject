@@ -1,0 +1,40 @@
+name: Deploy to Google Apps Script
+
+on:
+  push:
+    branches:
+      - main
+      - process-1-system
+      - process-2-partner
+    paths:
+      - "newScripts/**"
+      - ".github/workflows/deploy-to-apps-script.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install clasp
+        run: npm install -g @google/clasp@3.1.3
+
+      - name: Configure clasp
+        run: |
+          cat > .clasp.json <<'EOF'
+          {
+            "scriptId": "${{ secrets.CLASP_SCRIPT_ID }}",
+            "rootDir": "newScripts"
+          }
+          EOF
+          mkdir -p $HOME/.config
+          echo "${{ secrets.CLASP_TOKEN }}" | base64 --decode > $HOME/.config/.clasprc.json
+          cp $HOME/.config/.clasprc.json $HOME/.clasprc.json
+
+      - name: Push to Apps Script
+        run: clasp push --force
