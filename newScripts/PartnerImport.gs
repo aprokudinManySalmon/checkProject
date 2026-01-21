@@ -198,10 +198,21 @@ function applySemanticFilter(rows, fileName) {
   }
 
   const batchSize = PARTNER_CONFIG.SEMANTIC_BATCH_SIZE || 30;
+  Logger.log("Semantic batch size: %s", batchSize);
   const filtered = [];
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
+    Logger.log(
+      "Semantic batch %s: rows %s-%s",
+      Math.floor(i / batchSize) + 1,
+      i + 1,
+      Math.min(i + batchSize, rows.length)
+    );
     const decisions = classifyPartnerRows(batch, fileName);
+    Logger.log(
+      "Semantic decisions: %s",
+      decisions.filter((d) => d && d.include).length
+    );
     decisions.forEach((decision, idx) => {
       if (decision && decision.include) {
         filtered.push(batch[idx]);
@@ -246,7 +257,10 @@ function classifyPartnerRows(rows, fileName) {
   };
 
   const prompt = JSON.stringify(payload, null, 2);
+  Logger.log("Semantic request rows: %s for %s", rows.length, fileName);
+  const started = Date.now();
   const response = callDeepSeek(prompt);
+  Logger.log("Semantic request ms: %s for %s", Date.now() - started, fileName);
   const parsed = extractSemanticArray(response);
   if (!Array.isArray(parsed)) {
     throw new Error("DeepSeek вернул не массив для семантики: " + response);
