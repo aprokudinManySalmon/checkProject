@@ -121,24 +121,16 @@ function buildPartnerRows(data, schema, fileName) {
     const docName = getCellValue(row, columns.docName);
     const docNumberRaw = getCellValue(row, columns.docNumber);
     const docNumber = normalizeDocNumber(docNumberRaw || docName);
-    const docType = detectDocType(docName);
-
     if (!dateValue || !sumValue || !docNumber) {
       skippedMissing += 1;
-      continue;
-    }
-    if (!isAllowedDocType(docType, docName)) {
-      skippedType += 1;
       continue;
     }
 
     rows.push([
       dateValue,
-      docNumber,
-      docType,
-      sumValue,
       docName,
-      fileName
+      docNumber,
+      sumValue
     ]);
   }
 
@@ -174,24 +166,16 @@ function buildPartnerRowsFromBlocks(data, schema, fileName) {
       const creditValue = normalizeSum(getCellValue(row, block.creditCol));
       const sumValue = debitValue || creditValue;
       const docNumber = normalizeDocNumber(docName);
-      const docType = detectDocType(docName);
-
       if (!dateValue || !sumValue || !docNumber) {
         skippedMissing += 1;
-        return;
-      }
-      if (!isAllowedDocType(docType, docName)) {
-        skippedType += 1;
         return;
       }
 
       rows.push([
         dateValue,
-        docNumber,
-        docType,
-        sumValue,
         docName,
-        fileName
+      docNumber,
+      sumValue
       ]);
     });
   }
@@ -490,8 +474,16 @@ function normalizeDocNumber(value) {
   if (!text) {
     return "";
   }
-  const match = text.match(/[A-Za-zА-Яа-я0-9/-]{3,}/);
-  return match ? match[0] : text;
+  const withNumber = text.match(/№\s*([A-Za-zА-Яа-я0-9/-]+)/);
+  if (withNumber && withNumber[1]) {
+    return withNumber[1];
+  }
+  const digits = text.match(/\b\d{2,}\b/);
+  if (digits) {
+    return digits[0];
+  }
+  const fallback = text.match(/[A-Za-zА-Яа-я0-9/-]{3,}/);
+  return fallback ? fallback[0] : text;
 }
 
 function detectDocType(docName) {
