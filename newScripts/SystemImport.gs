@@ -53,8 +53,11 @@ function inferSchemaForSystem(data, systemName) {
   const systemConfig = getSystemConfig(systemName);
   const sampleRows = buildSampleRows(data);
   const prompt = buildSchemaPrompt(sampleRows, systemName, systemConfig.fields);
+  Logger.log("DeepSeek prompt (%s): %s", systemName, prompt);
   const response = callDeepSeek(prompt);
+  Logger.log("DeepSeek response (%s): %s", systemName, response);
   const schema = extractSchemaFromResponse(response);
+  Logger.log("DeepSeek schema (%s): %s", systemName, JSON.stringify(schema));
 
   if (!schema || !schema.columns) {
     throw new Error(
