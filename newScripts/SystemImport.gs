@@ -57,6 +57,7 @@ function inferSchemaForSystem(data, systemName) {
   const response = callDeepSeek(prompt);
   Logger.log("DeepSeek response (%s): %s", systemName, response);
   const schema = extractSchemaFromResponse(response);
+  applyHeaderFallback(schema, data, systemName);
   Logger.log("DeepSeek schema (%s): %s", systemName, JSON.stringify(schema));
 
   if (!schema || !schema.columns) {
@@ -105,6 +106,54 @@ function buildOutputRows(data, schema, systemName) {
   }
 
   return rows;
+}
+
+function applyHeaderFallback(schema, data, systemName) {
+  const systemConfig = getSystemConfig(systemName);
+  const headerIndex = Math.max((schema.headerRowIndex || 1) - 1, 0);
+  const headerRow = data[headerIndex] || [];
+  const headerMap = buildHeaderIndexMap(headerRow);
+  const columns = schema.columns || {};
+
+  systemConfig.fields.forEach((field) => {
+    if (columns[field.key]) {
+      return;
+    }
+    const candidates = [field.label].concat(field.aliases || []);
+    for (let i = 0; i < candidates.length; i += 1) {
+      const normalized = normalizeHeader(candidates[i]);
+      const matchIndex = headerMap[normalized];
+      if (matchIndex) {
+        columns[field.key] = matchIndex;
+        break;
+      }
+    }
+  });
+
+  schema.columns = columns;
+}
+
+function buildHeaderIndexMap(headerRow) {
+  const map = {};
+  headerRow.forEach((cell, index) => {
+    const normalized = normalizeHeader(cell);
+    if (normalized) {
+      map[normalized] = index + 1;
+    }
+  });
+  return map;
+}
+
+function normalizeHeader(value) {
+  if (!value) {
+    return "";
+  }
+  return value
+    .toString()
+    .toLowerCase()
+    .replace(/[«»"']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function ensureTargetSheet(spreadsheet, systemName) {

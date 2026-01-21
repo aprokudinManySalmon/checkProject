@@ -2,26 +2,41 @@ const SYSTEM_CONFIG = {
   IIKO: {
     fields: [
       { key: "date", label: "Дата", type: "text" },
-      { key: "docNumber", label: "Входящий номер", type: "text" },
-      { key: "partner", label: "Поставщик/Покупатель", type: "text" },
+      {
+        key: "docNumber",
+        label: "Входящий номер",
+        type: "text",
+        aliases: ["Номер", "Номер документа", "Вх. номер", "Входящий №"]
+      },
+      {
+        key: "partner",
+        label: "Поставщик/Покупатель",
+        type: "text",
+        aliases: ["Поставщик", "Покупатель", "Контрагент"]
+      },
       { key: "warehouse", label: "Склад", type: "text" },
-      { key: "sum", label: "Сумма, р.", type: "sum" },
+      { key: "sum", label: "Сумма, р.", type: "sum", aliases: ["Сумма"] },
       { key: "comment", label: "Комментарий", type: "text" }
     ]
   },
   DOCSINBOX: {
     fields: [
       { key: "date", label: "Дата", type: "text" },
-      { key: "docNumber", label: "Номер накладной поставщика", type: "text" },
+      {
+        key: "docNumber",
+        label: "Номер накладной поставщика",
+        type: "text",
+        aliases: ["Номер накладной", "Номер ТТН", "Номер", "Номер документа"]
+      },
       { key: "supplier", label: "Поставщик", type: "text" },
       { key: "buyer", label: "Покупатель", type: "text" },
       { key: "sum", label: "Сумма", type: "sum" },
-      { key: "status", label: "Статус приемки", type: "text" }
+      { key: "status", label: "Статус приемки", type: "text", aliases: ["Статус"] }
     ]
   },
   SBIS: {
     fields: [
-      { key: "eventDate", label: "Дата события", type: "text" },
+      { key: "eventDate", label: "Дата события", type: "text", aliases: ["Дата"] },
       { key: "docNumber", label: "Номер", type: "text" },
       { key: "counterparty", label: "Контрагент", type: "text" },
       { key: "sum", label: "Сумма", type: "sum" },
