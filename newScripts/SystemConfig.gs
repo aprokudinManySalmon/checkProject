@@ -23,6 +23,7 @@ const SYSTEM_CONFIG = {
     fields: [
       { key: "eventDate", label: "Дата события", type: "text" },
       { key: "docNumber", label: "Номер", type: "text" },
+      { key: "counterparty", label: "Контрагент", type: "text" },
       { key: "sum", label: "Сумма", type: "sum" },
       { key: "status", label: "Статус", type: "text" }
     ]
