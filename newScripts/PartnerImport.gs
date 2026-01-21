@@ -82,6 +82,7 @@ function inferPartnerSchema(data, fileName) {
   }
 
   applyPartnerHeaderFallback(schema, data);
+  applyPartnerPatternFallback(schema, data);
   Logger.log("DeepSeek schema (partner): %s", JSON.stringify(schema));
   return schema;
 }
@@ -248,6 +249,71 @@ function applyPartnerHeaderFallback(schema, data) {
     0;
 
   schema.columns = columns;
+}
+
+function applyPartnerPatternFallback(schema, data) {
+  const columns = schema.columns || {};
+  const startRowIndex = Math.max(schema.headerRowIndex || 1, 1);
+  const maxRows = Math.min(data.length, startRowIndex + 200);
+
+  if (!columns.date) {
+    columns.date = detectDateColumn(data, startRowIndex, maxRows);
+  }
+  if (!columns.sum) {
+    columns.sum = detectSumColumn(data, startRowIndex, maxRows);
+  }
+  if (!columns.docName) {
+    columns.docName = detectDocNameColumn(data, startRowIndex, maxRows);
+  }
+
+  schema.columns = columns;
+}
+
+function detectDateColumn(data, startRowIndex, endRowIndex) {
+  return detectColumnByPattern(
+    data,
+    startRowIndex,
+    endRowIndex,
+    /^\d{1,2}[./]\d{1,2}[./]\d{2,4}$/
+  );
+}
+
+function detectSumColumn(data, startRowIndex, endRowIndex) {
+  return detectColumnByPattern(
+    data,
+    startRowIndex,
+    endRowIndex,
+    /^-?\d+([ \u00A0]\d{3})*(?:[.,]\d+)?$/
+  );
+}
+
+function detectDocNameColumn(data, startRowIndex, endRowIndex) {
+  return detectColumnByPattern(
+    data,
+    startRowIndex,
+    endRowIndex,
+    /(реализац|коррект|исправ|накладн|упд)/i
+  );
+}
+
+function detectColumnByPattern(data, startRowIndex, endRowIndex, pattern) {
+  let bestIndex = 0;
+  let bestScore = 0;
+  const columnCount = data[0] ? data[0].length : 0;
+  for (let col = 0; col < columnCount; col += 1) {
+    let score = 0;
+    for (let row = startRowIndex; row < endRowIndex; row += 1) {
+      const value = getCellValue(data[row] || [], col + 1);
+      if (value && pattern.test(value.toString().trim())) {
+        score += 1;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = col + 1;
+    }
+  }
+  return bestIndex;
 }
 
 function findBestPartnerHeaderRowIndex(data) {
