@@ -120,7 +120,10 @@ function buildPartnerRows(data, schema, fileName) {
     const sumRaw = getCellValue(row, columns.sum);
     const sumValue = hasNumericValue(sumRaw) ? normalizeSum(sumRaw) : "";
     const docName = getCellValue(row, columns.docName);
-    const docNumberRaw = getCellValue(row, columns.docNumber);
+    let docNumberRaw = getCellValue(row, columns.docNumber);
+    if (isDateValue(docNumberRaw)) {
+      docNumberRaw = "";
+    }
     const docNumber = normalizeDocNumber(docNumberRaw || docName);
     if (!dateValue || !sumValue || !docNumber) {
       skippedMissing += 1;
@@ -570,6 +573,10 @@ function refinePartnerColumns(schema, data, startRowIndex, endRowIndex) {
     columns.docName = textPick.col;
   }
 
+  if (columns.docNumber && (columns.docNumber === columns.date || columns.docNumber === columns.sum)) {
+    columns.docNumber = 0;
+  }
+
   schema.columns = columns;
 }
 
@@ -582,6 +589,14 @@ function hasNumericValue(value) {
     return false;
   }
   return /^-?\d+([ \u00A0]\d{3})*(?:[.,]\d+)?$/.test(text);
+}
+
+function isDateValue(value) {
+  if (!value) {
+    return false;
+  }
+  const text = value.toString().trim();
+  return /^\d{1,2}[./]\d{1,2}[./]\d{2,4}$/.test(text);
 }
 
 function detectDateColumn(data, startRowIndex, endRowIndex) {
