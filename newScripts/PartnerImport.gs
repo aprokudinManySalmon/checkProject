@@ -312,31 +312,53 @@ function classifyPartnerRows(rows, fileName, provider) {
 }
 
 function extractSemanticArray(content) {
-  const startBracket = content.indexOf("[");
-  const endBracket = content.lastIndexOf("]");
-  if (startBracket !== -1 && endBracket !== -1) {
-    const arrayText = content.slice(startBracket, endBracket + 1);
+  if (!content) {
+    return null;
+  }
+
+  let trimmed = content.toString().trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced && fenced[1]) {
+    trimmed = fenced[1].trim();
+  }
+
+  const tryParse = (value) => {
     try {
-      return JSON.parse(arrayText);
+      return JSON.parse(value);
     } catch (err) {
-      Logger.log("Не удалось распарсить массив, пробуем объект: %s", err);
+      return null;
+    }
+  };
+  const sanitize = (value) => value.replace(/,(\s*[\]\}])/g, "$1");
+
+  const startBracket = trimmed.indexOf("[");
+  const endBracket = trimmed.lastIndexOf("]");
+  if (startBracket !== -1 && endBracket !== -1) {
+    const arrayText = trimmed.slice(startBracket, endBracket + 1);
+    let parsed = tryParse(arrayText);
+    if (!parsed) {
+      parsed = tryParse(sanitize(arrayText));
+    }
+    if (parsed) {
+      return parsed;
     }
   }
 
-  const startObject = content.indexOf("{");
-  const endObject = content.lastIndexOf("}");
+  const startObject = trimmed.indexOf("{");
+  const endObject = trimmed.lastIndexOf("}");
   if (startObject !== -1 && endObject !== -1) {
-    const objectText = content.slice(startObject, endObject + 1);
-    try {
-      const obj = JSON.parse(objectText);
-      if (Array.isArray(obj)) {
-        return obj;
+    const objectText = trimmed.slice(startObject, endObject + 1);
+    let parsed = tryParse(objectText);
+    if (!parsed) {
+      parsed = tryParse(sanitize(objectText));
+    }
+    if (parsed) {
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
-      if (Array.isArray(obj.items)) {
-        return obj.items;
+      if (Array.isArray(parsed.items)) {
+        return parsed.items;
       }
-    } catch (err) {
-      Logger.log("Не удалось распарсить объект: %s", err);
     }
   }
 
