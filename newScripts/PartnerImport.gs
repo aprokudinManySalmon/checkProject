@@ -198,7 +198,12 @@ function applySemanticFilter(rows, fileName) {
   }
 
   const batchSize = PARTNER_CONFIG.SEMANTIC_BATCH_SIZE || 30;
+  const provider = getPartnerConfigValue(
+    "SEMANTIC_PROVIDER",
+    PARTNER_CONFIG.SEMANTIC_PROVIDER || "deepseek"
+  );
   Logger.log("Semantic batch size: %s", batchSize);
+  Logger.log("Semantic provider: %s", provider);
   const filtered = [];
   const candidates = [];
   let fastExcluded = 0;
@@ -230,7 +235,7 @@ function applySemanticFilter(rows, fileName) {
       i + 1,
       Math.min(i + batchSize, candidates.length)
     );
-    const decisions = classifyPartnerRows(batch, fileName);
+    const decisions = classifyPartnerRows(batch, fileName, provider);
     Logger.log(
       "Semantic decisions: %s",
       decisions.filter((d) => d && d.include).length
@@ -251,7 +256,7 @@ function applySemanticFilter(rows, fileName) {
   return filtered;
 }
 
-function classifyPartnerRows(rows, fileName) {
+function classifyPartnerRows(rows, fileName, provider) {
   const payload = {
     task: "Классификация строк сверки поставщика",
     fileName: fileName,
@@ -280,11 +285,20 @@ function classifyPartnerRows(rows, fileName) {
   Logger.log("Semantic request rows: %s for %s", rows.length, fileName);
   Logger.log("Semantic payload chars: %s", prompt.length);
   const started = Date.now();
-  const response = callDeepSeek(prompt);
+  const response =
+    provider === "yandex"
+      ? callYandexGPT(prompt, {
+          systemText:
+            "Ты классифицируешь строки сверки. Верни только JSON массив " +
+            "объектов {id:number, include:boolean} без пояснений."
+        })
+      : callDeepSeek(prompt);
   Logger.log("Semantic request ms: %s for %s", Date.now() - started, fileName);
   const parsed = extractSemanticArray(response);
   if (!Array.isArray(parsed)) {
-    throw new Error("DeepSeek вернул не массив для семантики: " + response);
+    throw new Error(
+      "LLM вернул не массив для семантики (" + provider + "): " + response
+    );
   }
 
   const decisions = rows.map(() => ({ include: false }));
