@@ -362,6 +362,17 @@ function extractSemanticArray(content) {
     }
   }
 
+  const items = [];
+  const itemRegex =
+    /\{[^}]*["']?id["']?\s*:\s*(\d+)[^}]*["']?include["']?\s*:\s*(true|false)[^}]*\}/gi;
+  let match;
+  while ((match = itemRegex.exec(trimmed)) !== null) {
+    items.push({ id: Number(match[1]), include: match[2] === "true" });
+  }
+  if (items.length) {
+    return items;
+  }
+
   return null;
 }
 
