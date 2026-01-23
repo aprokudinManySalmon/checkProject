@@ -117,7 +117,8 @@ function buildPartnerRows(data, schema, fileName) {
     }
 
     const dateValue = getCellValue(row, columns.date);
-    const sumValue = normalizeSum(getCellValue(row, columns.sum));
+    const sumRaw = getCellValue(row, columns.sum);
+    const sumValue = hasNumericValue(sumRaw) ? normalizeSum(sumRaw) : "";
     const docName = getCellValue(row, columns.docName);
     const docNumberRaw = getCellValue(row, columns.docNumber);
     const docNumber = normalizeDocNumber(docNumberRaw || docName);
@@ -506,6 +507,81 @@ function applyPartnerPatternFallback(schema, data) {
   }
 
   schema.columns = columns;
+  refinePartnerColumns(schema, data, startRowIndex, maxRows);
+}
+
+function refinePartnerColumns(schema, data, startRowIndex, endRowIndex) {
+  const columns = schema.columns || {};
+  const columnCount = data[0] ? data[0].length : 0;
+  const scores = [];
+  for (let col = 1; col <= columnCount; col += 1) {
+    let dateScore = 0;
+    let sumScore = 0;
+    let textScore = 0;
+    for (let row = startRowIndex; row < endRowIndex; row += 1) {
+      const cell = getCellValue(data[row] || [], col);
+      if (!cell) {
+        continue;
+      }
+      if (/^\d{1,2}[./]\d{1,2}[./]\d{2,4}$/.test(cell)) {
+        dateScore += 1;
+      }
+      if (hasNumericValue(cell)) {
+        sumScore += 1;
+      }
+      if (/[A-Za-zА-Яа-я]/.test(cell) || cell.indexOf("№") !== -1) {
+        textScore += 1;
+      }
+    }
+    scores[col] = { dateScore: dateScore, sumScore: sumScore, textScore: textScore };
+  }
+
+  const pickBest = (key, exclude) => {
+    let bestCol = 0;
+    let bestScore = 0;
+    for (let col = 1; col <= columnCount; col += 1) {
+      if (exclude && exclude.indexOf(col) !== -1) {
+        continue;
+      }
+      const score = scores[col] ? scores[col][key] : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestCol = col;
+      }
+    }
+    return { col: bestCol, score: bestScore };
+  };
+
+  const datePick = pickBest("dateScore", []);
+  if (!columns.date || (scores[columns.date] && scores[columns.date].dateScore < datePick.score)) {
+    columns.date = datePick.col;
+  }
+
+  const sumPick = pickBest("sumScore", [columns.date]);
+  if (!columns.sum || (scores[columns.sum] && scores[columns.sum].sumScore < sumPick.score)) {
+    columns.sum = sumPick.col;
+  }
+
+  const textPick = pickBest("textScore", [columns.date, columns.sum]);
+  if (
+    !columns.docName ||
+    (scores[columns.docName] && scores[columns.docName].textScore < textPick.score)
+  ) {
+    columns.docName = textPick.col;
+  }
+
+  schema.columns = columns;
+}
+
+function hasNumericValue(value) {
+  if (!value) {
+    return false;
+  }
+  const text = value.toString().replace(/\s/g, "");
+  if (!/[0-9]/.test(text)) {
+    return false;
+  }
+  return /^-?\d+([ \u00A0]\d{3})*(?:[.,]\d+)?$/.test(text);
 }
 
 function detectDateColumn(data, startRowIndex, endRowIndex) {
