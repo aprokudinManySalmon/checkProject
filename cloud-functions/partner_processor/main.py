@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import os
 import re
@@ -41,7 +42,7 @@ def handler(event, context):
 
 
 def process_excel(file_bytes: bytes, file_name: str, options: Dict[str, Any]):
-    xl = pd.ExcelFile(file_bytes)
+    xl = pd.ExcelFile(io.BytesIO(file_bytes))
     all_rows: List[List[str]] = []
     for sheet in xl.sheet_names:
         df = xl.parse(sheet_name=sheet, header=None, dtype=str)
@@ -363,5 +364,5 @@ def _response(status: int, payload: Dict[str, Any]):
     return {
         "statusCode": status,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(payload, ensure_ascii=False),
+        "body": json.dumps(payload, ensure_ascii=True),
     }
