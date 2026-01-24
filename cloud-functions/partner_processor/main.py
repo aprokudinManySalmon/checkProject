@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -14,6 +15,8 @@ NUMERIC_RE = re.compile(r"^-?\d+([ \u00A0]\d{3})*(?:[.,]\d+)?$")
 
 
 def handler(event, context):
+    code_version = get_code_version()
+    print(f"Code version: {code_version}")
     try:
         body = event.get("body") or ""
         if event.get("isBase64Encoded"):
@@ -37,6 +40,9 @@ def handler(event, context):
         rows = process_excel(file_bytes, file_name or "file", options)
     except Exception as exc:
         safe_error = str(exc).encode("ascii", "backslashreplace").decode("ascii")
+        safe_traceback = traceback.format_exc().encode("ascii", "backslashreplace").decode("ascii")
+        print(f"Processing failed: {safe_error}")
+        print(f"Traceback: {safe_traceback}")
         return _response(500, {"error": f"Processing failed: {safe_error}"})
 
     return _response(200, {"rows": rows, "meta": {"rowCount": len(rows)}})
@@ -209,10 +215,14 @@ def extract_numbers_llm(texts: List[str], options: Dict[str, Any]):
             },
         ],
     }
+    json_payload_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
     response = requests.post(
         "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
-        headers={"Authorization": f"Api-Key {api_key}"},
-        json=payload,
+        headers={
+            "Authorization": f"Api-Key {api_key}",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+        data=json_payload_bytes,
         timeout=120,
     )
     response.raise_for_status()
@@ -252,10 +262,14 @@ def semantic_filter(rows: List[List[str]], options: Dict[str, Any]):
                 },
             ],
         }
+        json_payload_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
         response = requests.post(
             "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
-            headers={"Authorization": f"Api-Key {api_key}"},
-            json=payload,
+            headers={
+                "Authorization": f"Api-Key {api_key}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            data=json_payload_bytes,
             timeout=120,
         )
         response.raise_for_status()
@@ -358,12 +372,41 @@ def get_yandex_config():
     model = os.getenv("YANDEX_MODEL", "yandexgpt-lite/latest")
     if not api_key or not folder_id:
         raise RuntimeError("YANDEX_API_KEY and YANDEX_FOLDER_ID are required")
+    ensure_ascii(api_key, "YANDEX_API_KEY")
+    ensure_ascii(folder_id, "YANDEX_FOLDER_ID")
+    ensure_ascii(model, "YANDEX_MODEL")
     return api_key, folder_id, model
 
 
+def ensure_ascii(value: str, name: str) -> None:
+    try:
+        value.encode("ascii")
+    except UnicodeEncodeError:
+        offenders = [
+            f"{idx}:U+{ord(ch):04X}"
+            for idx, ch in enumerate(value)
+            if ord(ch) > 127
+        ]
+        tail = "..." if len(offenders) > 10 else ""
+        raise RuntimeError(
+            f"{name} contains non-ASCII characters at {', '.join(offenders[:10])}{tail}"
+        )
+
+
 def _response(status: int, payload: Dict[str, Any]):
+    payload = dict(payload)
+    meta = payload.get("meta") or {}
+    meta["codeVersion"] = get_code_version()
+    payload["meta"] = meta
     return {
         "statusCode": status,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+            "Content-Type": "application/json",
+            "X-Code-Version": get_code_version(),
+        },
         "body": json.dumps(payload, ensure_ascii=True),
     }
+
+
+def get_code_version() -> str:
+    return os.getenv("CODE_VERSION", "unknown")

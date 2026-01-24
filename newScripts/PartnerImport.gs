@@ -91,8 +91,8 @@ function callPartnerFunction(functionUrl, file, fileName) {
     fileName: fileName,
     fileBase64: Utilities.base64Encode(file.getBlob().getBytes()),
     options: {
-      semantic: true,
-      numberMode: "regex_first"
+      semantic: PARTNER_CONFIG.USE_SEMANTIC_FILTER,
+      numberMode: PARTNER_CONFIG.NUMBER_MODE || "regex_first"
     }
   };
 
@@ -113,6 +113,7 @@ function callPartnerFunction(functionUrl, file, fileName) {
   if (!json || !Array.isArray(json.rows)) {
     throw new Error("Function response without rows: " + text);
   }
+  Logger.log("Function meta: %s", JSON.stringify(json.meta || {}));
 
   return json.rows;
 }

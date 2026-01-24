@@ -10,6 +10,7 @@ const PARTNER_CONFIG = {
   SEMANTIC_BATCH_SIZE: 250,
   SEMANTIC_FAST_EXCLUDE: true,
   SEMANTIC_SEND_REASON: false,
+  NUMBER_MODE: "regex_first",
   SEMANTIC_EXCLUDE_PATTERNS: [
     "оплата",
     "оплачено",
