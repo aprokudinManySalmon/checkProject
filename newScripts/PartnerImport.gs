@@ -92,7 +92,9 @@ function callPartnerFunction(functionUrl, file, fileName) {
     fileBase64: Utilities.base64Encode(file.getBlob().getBytes()),
     options: {
       semantic: PARTNER_CONFIG.USE_SEMANTIC_FILTER,
-      numberMode: PARTNER_CONFIG.NUMBER_MODE || "regex_first"
+      numberMode: PARTNER_CONFIG.NUMBER_MODE || "regex_first",
+      llmExtract: PARTNER_CONFIG.LLM_EXTRACT,
+      llmMaxChars: PARTNER_CONFIG.LLM_MAX_CHARS
     }
   };
 

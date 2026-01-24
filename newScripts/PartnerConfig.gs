@@ -11,6 +11,8 @@ const PARTNER_CONFIG = {
   SEMANTIC_FAST_EXCLUDE: true,
   SEMANTIC_SEND_REASON: false,
   NUMBER_MODE: "regex_first",
+  LLM_EXTRACT: true,
+  LLM_MAX_CHARS: 120000,
   SEMANTIC_EXCLUDE_PATTERNS: [
     "оплата",
     "оплачено",

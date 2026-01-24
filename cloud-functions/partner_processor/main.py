@@ -56,7 +56,10 @@ def process_excel(file_bytes: bytes, file_name: str, options: Dict[str, Any]):
         data = df.fillna("").values.tolist()
         if not data:
             continue
-        rows = extract_rows(data, file_name, options)
+        if options.get("llmExtract"):
+            rows = extract_rows_llm(data, file_name, sheet, options)
+        else:
+            rows = extract_rows(data, file_name, options)
         all_rows.extend(rows)
 
     if options.get("semantic", True):
@@ -78,6 +81,82 @@ def extract_rows(
     number_mode = options.get("numberMode", "regex_first")
     rows = apply_number_extraction(rows, number_mode, options)
     return rows
+
+
+def extract_rows_llm(
+    data: List[List[str]],
+    file_name: str,
+    sheet_name: str,
+    options: Dict[str, Any],
+) -> List[List[str]]:
+    api_key, folder_id, model = get_yandex_config()
+    max_chars = int(options.get("llmMaxChars", 120000))
+    rows_payload = []
+    for idx, row in enumerate(data):
+        row_text = build_row_text(row)
+        if row_text:
+            rows_payload.append({"id": idx, "text": row_text})
+
+    if not rows_payload:
+        return []
+
+    user_text = json.dumps(
+        {"fileName": file_name, "sheetName": sheet_name, "rows": rows_payload},
+        ensure_ascii=True,
+    )
+    print(
+        "LLM extract input chars: %s rows: %s sheet: %s"
+        % (len(user_text), len(rows_payload), sheet_name)
+    )
+    if len(user_text) > max_chars:
+        raise RuntimeError(
+            "LLM extract payload too large for single request: "
+            f"{len(user_text)} chars > {max_chars} chars"
+        )
+
+    payload = {
+        "modelUri": f"gpt://{folder_id}/{model}",
+        "completionOptions": {"stream": False, "temperature": 0, "maxTokens": 1200},
+        "messages": [
+            {
+                "role": "system",
+                "text": (
+                    "Ты извлекаешь строки сверки поставщика из таблицы. "
+                    "Верни только JSON массив объектов "
+                    "{id:number, date:string, text:string, number:string, sum:string}. "
+                    "Исключай строки без даты/суммы/текста. "
+                    "sum верни числом в строке, точка как разделитель."
+                ),
+            },
+            {"role": "user", "text": user_text},
+        ],
+    }
+    json_payload_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+    response = requests.post(
+        "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+        headers={
+            "Authorization": f"Api-Key {api_key}",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+        data=json_payload_bytes,
+        timeout=120,
+    )
+    response.raise_for_status()
+    message = response.json()["result"]["alternatives"][0]["message"]["text"]
+    items = parse_json_array(message)
+    results: List[List[str]] = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        date_val = str(item.get("date") or "").strip()
+        text_val = str(item.get("text") or "").strip()
+        number_val = str(item.get("number") or "").strip()
+        sum_val = normalize_sum(str(item.get("sum") or "").strip())
+        if not (date_val and text_val and sum_val):
+            continue
+        results.append([date_val, text_val, number_val, sum_val])
+
+    return results
 
 
 def detect_blocks(data: List[List[str]]):
@@ -307,6 +386,20 @@ def normalize_sum(value: str) -> str:
     if not value:
         return ""
     return value.replace(" ", "").replace("\u00A0", "").replace(",", ".")
+
+
+def build_row_text(row: List[str]) -> str:
+    parts = []
+    for cell in row:
+        if cell is None:
+            continue
+        text = str(cell).strip()
+        if not text:
+            continue
+        if len(text) > 160:
+            text = text[:160] + "..."
+        parts.append(text)
+    return " | ".join(parts)
 
 
 def is_date(value: str) -> bool:
