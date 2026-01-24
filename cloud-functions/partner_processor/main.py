@@ -36,7 +36,8 @@ def handler(event, context):
     try:
         rows = process_excel(file_bytes, file_name or "file", options)
     except Exception as exc:
-        return _response(500, {"error": f"Processing failed: {exc}"})
+        safe_error = str(exc).encode("ascii", "backslashreplace").decode("ascii")
+        return _response(500, {"error": f"Processing failed: {safe_error}"})
 
     return _response(200, {"rows": rows, "meta": {"rowCount": len(rows)}})
 
@@ -203,7 +204,7 @@ def extract_numbers_llm(texts: List[str], options: Dict[str, Any]):
                 "role": "user",
                 "text": json.dumps(
                     [{"id": i, "text": t} for i, t in enumerate(texts)],
-                    ensure_ascii=False,
+                    ensure_ascii=True,
                 ),
             },
         ],
@@ -246,7 +247,7 @@ def semantic_filter(rows: List[List[str]], options: Dict[str, Any]):
                     "role": "user",
                     "text": json.dumps(
                         [{"id": idx, "text": row[1]} for idx, row in enumerate(batch)],
-                        ensure_ascii=False,
+                        ensure_ascii=True,
                     ),
                 },
             ],
