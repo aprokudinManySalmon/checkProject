@@ -20,14 +20,35 @@ function processPartnerFile() {
   Logger.log("Partner files found: %s", files.length);
   const outputSheet = ensurePartnerSheet(spreadsheet);
 
+  const functionUrl = getPartnerConfigValue(
+    "PARTNER_FUNCTION_URL",
+    PARTNER_CONFIG.FUNCTION_URL
+  );
+  const useCloudFunction =
+    PARTNER_CONFIG.USE_CLOUD_FUNCTION && functionUrl;
+
   let processedAny = false;
   const allRows = [];
   for (let i = 0; i < files.length; i += 1) {
     const file = files[i];
     const fileName = file.getName();
     Logger.log("Processing partner file: %s", fileName);
-    const convertedFileId = convertExcelToSheet(fileName, file.getId());
     let processed = false;
+    if (useCloudFunction) {
+      const rows = callPartnerFunction(functionUrl, file, fileName);
+      Logger.log("Rows extracted from %s: %s", fileName, rows.length);
+      if (rows.length) {
+        allRows.push.apply(allRows, rows);
+      }
+      processed = true;
+      processedAny = true;
+      if (processed && PARTNER_CONFIG.DELETE_SOURCE_FILES) {
+        file.setTrashed(true);
+      }
+      continue;
+    }
+
+    const convertedFileId = convertExcelToSheet(fileName, file.getId());
     try {
       const sourceSheet = SpreadsheetApp.openById(convertedFileId).getSheets()[0];
       const data = sourceSheet.getDataRange().getDisplayValues();
@@ -63,6 +84,37 @@ function processPartnerFile() {
   }
 
   writePartnerRows(outputSheet, allRows);
+}
+
+function callPartnerFunction(functionUrl, file, fileName) {
+  const payload = {
+    fileName: fileName,
+    fileBase64: Utilities.base64Encode(file.getBlob().getBytes()),
+    options: {
+      semantic: true,
+      numberMode: "regex_first"
+    }
+  };
+
+  const response = UrlFetchApp.fetch(functionUrl, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  const status = response.getResponseCode();
+  const text = response.getContentText();
+  if (status < 200 || status >= 300) {
+    throw new Error("Function error " + status + ": " + text);
+  }
+
+  const json = JSON.parse(text);
+  if (!json || !Array.isArray(json.rows)) {
+    throw new Error("Function response without rows: " + text);
+  }
+
+  return json.rows;
 }
 
 function inferPartnerSchema(data, fileName) {
