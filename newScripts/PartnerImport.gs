@@ -94,7 +94,10 @@ function callPartnerFunction(functionUrl, file, fileName) {
       semantic: PARTNER_CONFIG.USE_SEMANTIC_FILTER,
       numberMode: PARTNER_CONFIG.NUMBER_MODE || "regex_first",
       llmExtract: PARTNER_CONFIG.LLM_EXTRACT,
-      llmMaxChars: PARTNER_CONFIG.LLM_MAX_CHARS
+      llmMaxChars: PARTNER_CONFIG.LLM_MAX_CHARS,
+      llmMaxRows: PARTNER_CONFIG.LLM_MAX_ROWS,
+      llmHeaderRows: PARTNER_CONFIG.LLM_HEADER_ROWS,
+      llmCellMax: PARTNER_CONFIG.LLM_CELL_MAX
     }
   };
 

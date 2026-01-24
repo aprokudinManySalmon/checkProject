@@ -13,6 +13,9 @@ const PARTNER_CONFIG = {
   NUMBER_MODE: "regex_first",
   LLM_EXTRACT: true,
   LLM_MAX_CHARS: 120000,
+  LLM_MAX_ROWS: 500,
+  LLM_HEADER_ROWS: 8,
+  LLM_CELL_MAX: 120,
   SEMANTIC_EXCLUDE_PATTERNS: [
     "оплата",
     "оплачено",

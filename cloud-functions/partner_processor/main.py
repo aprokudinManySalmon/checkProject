@@ -91,11 +91,11 @@ def extract_rows_llm(
 ) -> List[List[str]]:
     api_key, folder_id, model = get_yandex_config()
     max_chars = int(options.get("llmMaxChars", 120000))
-    rows_payload = []
-    for idx, row in enumerate(data):
-        row_text = build_row_text(row)
-        if row_text:
-            rows_payload.append({"id": idx, "text": row_text})
+    max_rows = int(options.get("llmMaxRows", 500))
+    header_rows = int(options.get("llmHeaderRows", 8))
+    max_cell_len = int(options.get("llmCellMax", 120))
+
+    rows_payload = build_rows_payload(data, max_cell_len)
 
     if not rows_payload:
         return []
@@ -108,6 +108,21 @@ def extract_rows_llm(
         "LLM extract input chars: %s rows: %s sheet: %s"
         % (len(user_text), len(rows_payload), sheet_name)
     )
+    if len(user_text) > max_chars:
+        rows_payload = compress_rows_for_llm(
+            data,
+            header_rows=header_rows,
+            max_rows=max_rows,
+            max_cell_len=max_cell_len,
+        )
+        user_text = json.dumps(
+            {"fileName": file_name, "sheetName": sheet_name, "rows": rows_payload},
+            ensure_ascii=True,
+        )
+        print(
+            "LLM extract compressed chars: %s rows: %s sheet: %s"
+            % (len(user_text), len(rows_payload), sheet_name)
+        )
     if len(user_text) > max_chars:
         raise RuntimeError(
             "LLM extract payload too large for single request: "
@@ -388,7 +403,7 @@ def normalize_sum(value: str) -> str:
     return value.replace(" ", "").replace("\u00A0", "").replace(",", ".")
 
 
-def build_row_text(row: List[str]) -> str:
+def build_row_text(row: List[str], max_cell_len: int = 120) -> str:
     parts = []
     for cell in row:
         if cell is None:
@@ -396,10 +411,76 @@ def build_row_text(row: List[str]) -> str:
         text = str(cell).strip()
         if not text:
             continue
-        if len(text) > 160:
-            text = text[:160] + "..."
+        if len(text) > max_cell_len:
+            text = text[:max_cell_len] + "..."
         parts.append(text)
     return " | ".join(parts)
+
+
+def build_rows_payload(data: List[List[str]], max_cell_len: int) -> List[Dict[str, Any]]:
+    rows_payload = []
+    for idx, row in enumerate(data):
+        row_text = build_row_text(row, max_cell_len)
+        if row_text:
+            rows_payload.append({"id": idx, "text": row_text})
+    return rows_payload
+
+
+def compress_rows_for_llm(
+    data: List[List[str]],
+    header_rows: int,
+    max_rows: int,
+    max_cell_len: int,
+) -> List[Dict[str, Any]]:
+    candidates = []
+    for idx, row in enumerate(data):
+        if idx < header_rows:
+            row_text = build_row_text(row, max_cell_len)
+            if row_text:
+                candidates.append((idx, row_text, 1000))
+            continue
+        score = row_signal_score(row)
+        if score <= 0:
+            continue
+        row_text = build_row_text(row, max_cell_len)
+        if row_text:
+            candidates.append((idx, row_text, score))
+
+    if max_rows and len(candidates) > max_rows:
+        top = sorted(candidates, key=lambda x: x[2], reverse=True)[:max_rows]
+        selected = sorted(top, key=lambda x: x[0])
+    else:
+        selected = sorted(candidates, key=lambda x: x[0])
+
+    return [{"id": idx, "text": text} for idx, text, _ in selected]
+
+
+def row_signal_score(row: List[str]) -> int:
+    score = 0
+    nonempty = 0
+    joined_parts = []
+    for cell in row:
+        if cell is None:
+            continue
+        text = str(cell).strip()
+        if not text:
+            continue
+        nonempty += 1
+        joined_parts.append(text)
+        if is_date(text):
+            score += 3
+        if is_numeric(text):
+            score += 2
+        if "№" in text:
+            score += 1
+    if not nonempty:
+        return 0
+    joined = " ".join(joined_parts).lower()
+    for keyword in ("дата", "документ", "дебет", "кредит", "сумма", "итого", "сальдо"):
+        if keyword in joined:
+            score += 2
+    score += min(nonempty, 5)
+    return score
 
 
 def is_date(value: str) -> bool:
