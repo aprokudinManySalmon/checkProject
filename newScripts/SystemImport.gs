@@ -1,7 +1,7 @@
-function onOpen() {
+function onOpenSystem() {
   SpreadsheetApp.getUi()
     .createMenu("Обработка")
-    .addItem("Обработать", "processSystemFiles")
+    .addItem("Обработать учетные системы", "processSystemFiles")
     .addToUi();
 }
 

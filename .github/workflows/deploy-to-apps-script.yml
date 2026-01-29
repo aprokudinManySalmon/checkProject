@@ -3,8 +3,6 @@ name: Deploy to Google Apps Script
 on:
   push:
     branches:
-      - main
-      - process-1-system
       - process-2-partner
     paths:
       - "newScripts/**"
@@ -28,7 +26,7 @@ jobs:
         run: |
           cat > .clasp.json <<'EOF'
           {
-            "scriptId": "${{ secrets.CLASP_SCRIPT_ID }}",
+            "scriptId": "${{ secrets.CLASP_SCRIPT_ID_PARTNER }}",
             "rootDir": "newScripts"
           }
           EOF
