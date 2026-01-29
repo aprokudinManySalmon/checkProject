@@ -10,7 +10,7 @@ from rapidfuzz import process, fuzz, utils
 
 st.set_page_config(page_title="Excel Document Processor", layout="wide")
 
-APP_VERSION = "1.1.16"
+APP_VERSION = "1.1.18"
 
 # Константы Google Drive
 SYSTEMS_FOLDER_ID = "1ijv4no6aI3E_le5zAe12QGssehrUETkh"
@@ -403,6 +403,7 @@ def perform_reconciliation(act_data, system_data_map, supplier_name):
     results = []
     
     act_stats = {"total_sum": 0.0, "count": 0}
+    act_missing_in_iiko = [] # Documents in Act but not in IIKO
     
     print(f"\n[RECON] Starting reconciliation for supplier: '{supplier_name}'")
     for sys_name, idx_map in system_indices.items():
@@ -468,6 +469,10 @@ def perform_reconciliation(act_data, system_data_map, supplier_name):
                         system_indices["IIKO_unmatched"].discard(k)
         else:
             res_row["iiko_delta"] = amount_act 
+            # Добавляем в список "Лишние в Акте"
+            # Только если есть номер документа
+            if doc_num and str(doc_num).strip():
+                act_missing_in_iiko.append(str(doc_num).strip())
         
         # FB (New System)
         fb_idx = system_indices.get("FB", {})
@@ -569,7 +574,8 @@ def perform_reconciliation(act_data, system_data_map, supplier_name):
         "delta_count": act_stats["count"] - system_stats["IIKO"]["count"],
         
         "iiko_duplicates": system_stats["IIKO"].get("duplicates", ""),
-        "iiko_missing": ", ".join(iiko_missing_in_act)
+        "iiko_missing": ", ".join(iiko_missing_in_act),
+        "act_missing": ", ".join(act_missing_in_iiko)
     }
         
     return {"rows": results, "summary": summary}
@@ -727,6 +733,9 @@ if uploaded_files:
                             
                             if summary.get("iiko_missing"):
                                 st.error(f"🚫 Найдены документы в IIKO, которых НЕТ в Акте: {summary['iiko_missing']}")
+                            
+                            if summary.get("act_missing"):
+                                st.error(f"❓ Найдены документы в Акте, которых НЕТ в IIKO: {summary['act_missing']}")
                             
                             st.dataframe(pd.DataFrame(recon_rows))
                             

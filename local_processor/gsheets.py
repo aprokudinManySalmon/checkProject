@@ -289,7 +289,7 @@ def update_supplier_sheet(spreadsheet_id, sheet_name, data, summary=None):
                     print(f"[DEBUG] Не удалось скопировать. Создаем пустой.")
                     worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=100, cols=40)
 
-        # 2. Читаем старые комментарии (Col AK / Index 36)
+        # 2. Читаем старые комментарии (Col AD/29 и Col AK/36)
         old_comments = {} 
         try:
             # Читаем только нужные колонки для скорости, но get_all_values проще
@@ -300,12 +300,23 @@ def update_supplier_sheet(spreadsheet_id, sheet_name, data, summary=None):
                     # Безопасное чтение индекса
                     if len(row) > 5:
                         doc_num = str(row[5]).strip() # Col F
-                        comment = ""
-                        if len(row) > 36:
-                            comment = str(row[36]).strip()
                         
-                        if doc_num and comment:
-                            old_comments[doc_num] = comment
+                        manager_comment = ""
+                        dxbx_comment = ""
+                        
+                        # DXBX Comment (Index 29 / AD)
+                        if len(row) > 29:
+                            dxbx_comment = str(row[29]).strip()
+                            
+                        # Manager Comment (Index 36 / AK)
+                        if len(row) > 36:
+                            manager_comment = str(row[36]).strip()
+                        
+                        if doc_num and (manager_comment or dxbx_comment):
+                            old_comments[doc_num] = {
+                                "manager": manager_comment,
+                                "dxbx": dxbx_comment
+                            }
         except Exception as e:
             print(f"[DEBUG] Ошибка чтения комментариев: {e}")
             pass
@@ -320,11 +331,18 @@ def update_supplier_sheet(spreadsheet_id, sheet_name, data, summary=None):
                 val = item.get(key, "")
                 row_list[col_idx] = val
             
-            # Восстанавливаем комментарий
+            # Восстанавливаем комментарии
             doc_num = item.get("supplier_doc", "").strip()
             if doc_num in old_comments:
-                if not row_list[36]: 
-                    row_list[36] = old_comments[doc_num]
+                comments = old_comments[doc_num]
+                
+                # Restore Manager Comment (AK/36)
+                if not row_list[36] and comments.get("manager"): 
+                    row_list[36] = comments["manager"]
+                    
+                # Restore DXBX Comment (AD/29)
+                if not row_list[29] and comments.get("dxbx"):
+                    row_list[29] = comments["dxbx"]
             
             # === ВСТАВКА ИТОГОВ (SUMMARY) В КОЛОНКИ B и C (Индексы 1 и 2) ===
             # Вставляем только в первые 12 строк данных
@@ -367,11 +385,15 @@ def update_supplier_sheet(spreadsheet_id, sheet_name, data, summary=None):
                     row_list[1] = "Лишние в IIKO"
                     val = summary.get("iiko_missing", "")
                     row_list[2] = val if val else "Нет"
+                elif i == 12:
+                    row_list[1] = "Лишние в Акте"
+                    val = summary.get("act_missing", "")
+                    row_list[2] = val if val else "Нет"
             
             new_rows_data.append(row_list)
             
-        # Если строк данных меньше 12, нужно добить пустыми строками, чтобы вывести саммари
-        while summary and len(new_rows_data) < 12:
+        # Если строк данных меньше 13, нужно добить пустыми строками, чтобы вывести саммари
+        while summary and len(new_rows_data) < 13:
             i = len(new_rows_data)
             row_list = [""] * (MAX_COL_IDX + 1)
             if i == 0:
@@ -411,6 +433,10 @@ def update_supplier_sheet(spreadsheet_id, sheet_name, data, summary=None):
             elif i == 11:
                 row_list[1] = "Лишние в IIKO"
                 val = summary.get("iiko_missing", "")
+                row_list[2] = val if val else "Нет"
+            elif i == 12:
+                row_list[1] = "Лишние в Акте"
+                val = summary.get("act_missing", "")
                 row_list[2] = val if val else "Нет"
             new_rows_data.append(row_list)
 
